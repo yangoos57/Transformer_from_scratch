@@ -481,7 +481,7 @@ def trainW2V():
     print("Complete wordsList Load!!")
 
     # analyze corpus
-    print("konelpy 실행 중... 평균 9분 소요")
+    print("konlpy 실행 중... 평균 9분 소요")
     konlpyWords = list(map(lambda x: okt.nouns(x), wordsList))
     print("Complete konlpyWords")
 
