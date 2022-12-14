@@ -1,0 +1,13 @@
+{
+    "src_vocab_size" : 11509,
+    "trg_vocab_size" : 10837,
+    "src_pad_idx" :1,
+    "trg_pad_idx" :1,
+    "embed_size" : 512 ,
+    "num_layers" :3 ,
+    "forward_expansion" : 2,
+    "heads": 8,
+    "dropout" : 0.1,
+    "device": "cpu",
+    "max_length":140    
+}
