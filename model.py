@@ -210,16 +210,20 @@ class DecoderBlock(nn.Module):
         self.encoder_block = EncoderBlock(embed_size, heads, dropout, forward_expansion)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, value, key, src_mask, target_mask):
-        # src_mask : Multi-head attention에서 Pad에 대한 Mask 수행
-        # output에 대한 attention 수행
+    def forward(self, x, value, key, src_trg_mask, target_mask):
+        # x = decoder_input
+        # value,key = encoder_input
+        # src_trg_mask : Multi-head attention에서 Pad에 대한 Mask 수행
         # target_mask : Masked Multi-head attention에서 Teacher Forcing을 위한 Mask 수행
+        # output에 대한 attention 수행
+
+        # masked_attention
         attention = self.attention(x, x, x, target_mask)
         # add & Norm
         query = self.dropout(self.norm(attention + x))
 
         # encoder_decoder attention + feed_forward
-        out = self.encoder_block(value, key, query, src_mask)
+        out = self.encoder_block(value, key, query, src_trg_mask)
         return out
 
 
@@ -268,15 +272,15 @@ class Decoder(nn.Module):
         )
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, enc_out, src_mask, trg_mask):
+    def forward(self, x, enc_out, src_trg_mask, trg_mask):
         # N, seq_length = x.shape
         # positional embedding
         _, seq_len = x.size()
         pos_embed = self.pos_embed[:, :seq_len, :]
         out = self.dropout(self.word_embedding(x) + pos_embed)
         for layer in self.layers:
-            # Decoder Input, Encoder K, Encoder V , src_mask, trg_mask
-            out = layer(out, enc_out, enc_out, src_mask, trg_mask)
+            # Decoder Input, Encoder K, Encoder V , src_trg_mask, trg_mask
+            out = layer(out, enc_out, enc_out, src_trg_mask, trg_mask)
         return out
 
 
@@ -319,13 +323,41 @@ class transformer(nn.Module):
         self.src_pad_idx = src_pad_idx
         self.trg_pad_idx = trg_pad_idx
         self.device = device
+
         # Probability Generlator
         self.fc_out = nn.Linear(embed_size, trg_vocab_size)
 
-    def make_src_mask(self, src):
-        src_mask = (src != self.src_pad_idx).unsqueeze(1).unsqueeze(2)
-        # (N,1,1,src_len)
-        return src_mask.to(self.device)
+    def encode(self, src):
+        src_mask = self.make_pad_mask(src, src)
+        return self.Encoder(src, src_mask)
+
+    def decode(self, enc_src, trg):
+        # decode
+        src_trg_mask = self.make_pad_mask(trg, enc_src)  # Decoder Input에 대한 masking 필요
+        trg_mask = self.make_trg_mask(trg)
+        out = self.Decoder(trg, enc_src, src_trg_mask, trg_mask)
+        # Linear Layer
+        out = self.fc_out(out)  # num of sentence x max_length x trg_vocab_size
+
+        # Softmax
+        out = F.log_softmax(out, dim=-1)
+        return out
+
+    def make_pad_mask(self, query, key):
+        len_query, len_key = query.size(1), key.size(1)
+
+        # batch_size x 1 x 1 x len_key
+        key = key.ne(self.src_pad_idx).unsqueeze(1).unsqueeze(2)
+        # batch_size x 1 x len_query x len_key
+        key = key.repeat(1, 1, len_query, 1)
+
+        # batch_size x 1 x len_query x 1
+        query = query.ne(self.src_pad_idx).unsqueeze(1).unsqueeze(3)
+        # batch_size x 1 x len_query x len_key
+        query = query.repeat(1, 1, 1, len_key)
+
+        mask = key & query
+        return mask
 
     def make_trg_mask(self, trg):
         # trg = triangle
@@ -336,10 +368,11 @@ class transformer(nn.Module):
         return trg_mask.to(self.device)
 
     def forward(self, src, trg):
-        src_mask = self.make_src_mask(src)
+        src_mask = self.make_pad_mask(src, src)
         trg_mask = self.make_trg_mask(trg)
+        src_trg_mask = self.make_pad_mask(trg, src)  # Decoder Input에 대한 masking 필요
         enc_src = self.Encoder(src, src_mask)
-        out = self.Decoder(trg, enc_src, src_mask, trg_mask)
+        out = self.Decoder(trg, enc_src, src_trg_mask, trg_mask)
         # Linear Layer
         out = self.fc_out(out)  # num of sentence x max_length x trg_vocab_size
 
