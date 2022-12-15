@@ -7,32 +7,32 @@ import math
 class selfAttention(nn.Module):
     def __init__(self, embed_size, heads) -> None:
         """
-        embed_size : input 토큰 개수, 논문에서는 512개로 사용
-        heads : multi_head의 개수, 논문에서는 8개 사용
-        Self Attention은 특정 단어(query)와 다른 단어(key) 간의 중요도를 파악하는 매커니즘이다.
+        config.json 참고
+
+        embed_size(=512) : embedding 차원
+        heads(=8) : Attention 개수
         """
         super().__init__()
-        self.embed_size = embed_size  # 512차원
-        self.heads = heads  # 8개
-        self.head_dim = embed_size // heads  # 64차원(개별 attention의 차원)
-        """
-        query는 기준이 되는 token 모음
-        key는 문장 내 token 모음
-        모든 token이 query로 활용되므로
-        모든 token의 개별 token 간 연관성 파악이 가능
-        """
-        # input feature, output feature
-        self.value = nn.Linear(self.head_dim, self.head_dim, bias=False)  # 64 => 64
-        self.key = nn.Linear(self.head_dim, self.head_dim, bias=False)  # 64 => 64
+        self.embed_size = embed_size  # 512
+        self.heads = heads  # 8
+        self.head_dim = embed_size // heads  # 개별 attention의 embed_size(=64)
+
+        # Query, Key, Value
         self.query = nn.Linear(self.head_dim, self.head_dim, bias=False)  # 64 => 64
-        # Multi-headed attention을 만듬
-        # fully connected out
-        # input feature = outfut feature
-        self.fc_out = nn.Linear(heads * self.head_dim, embed_size)  # 64 * 8 => 512
+        self.key = nn.Linear(self.head_dim, self.head_dim, bias=False)  # 64 => 64
+        self.value = nn.Linear(self.head_dim, self.head_dim, bias=False)  # 64 => 64
+
+        # 8개 attention => 1개의 attention으로 생성
+        self.fc_out = nn.Linear(heads * self.head_dim, embed_size)  # 8 * 64 => 512
 
     def forward(self, value, key, query, mask):
         """
-        # query, key, value: (문장 개수(n) x 최대 token 개수(=100) x embeding 차원(=512) )
+        query, key, value size : (N, seq_len, embed_size)
+
+        - N_batch = 문장 개수(=batch_size)
+        - seq_len : 훈련 문장 내 최대 token 개수
+        - embed_size : embedding 차원
+
         """
 
         N_batch = query.shape[0]  # 총 문장 개수
@@ -40,9 +40,14 @@ class selfAttention(nn.Module):
         key_len = key.shape[1]  # token 개수
         query_len = query.shape[1]  # token 개수
 
+        # n : batch_size(=128)
+        # h : heads(=8)
+        # value,key,query_len, : token_len
+        # d_k : embed_size/h(=64)
+
         value = value.reshape(
             N_batch, self.heads, value_len, self.head_dim
-        )  # (n x h x value_len x d_k)
+        )  # (n, h, value_len, d_k)
         key = key.reshape(
             N_batch, self.heads, key_len, self.head_dim
         )  # (n x h x key_len x d_k)
@@ -56,71 +61,73 @@ class selfAttention(nn.Module):
         Q = self.query(query)
 
         # score = Q dot K^T
-        # score = torch.einsum("nqhd,nkhd->nhqk", [query,key])
         score = torch.matmul(Q, K.transpose(-2, -1))
-        # query shape : (n x h x query_len x d_k)
-        # key shape : (n x h x d_k x key_len)
-        # score shape : (n x h x query_len x key_len)
-        # Pad 부분을 0 => -inf로 변환하는 과정
-        #
+        # query shape : (n, h, query_len, d_k)
+        # transposed key shape : (n, h, d_k, key_len)
+        # score shape : (n, h, query_len, key_len)
+
         if mask is not None:
             score = score.masked_fill(mask == 0, float("-1e20"))
             """
-            mask = 0 인 값에 대해서 -inf 대입
-            -1e20 = -inf
-            -inf이기 때문에 softmax 계산시 값 0을 부여받음
+            mask = 0 인 경우 -inf(= -1e20) 대입
+            softmax 계산시 -inf인 부분은 0이 됨.
             """
+
         # attention 정의
-        # parameter dim은 몇번째 값에 softmax를 수행하는지 설정함.
-        softmax_score = torch.softmax(score / (self.embed_size ** (1 / 2)), dim=3)
-        # out = torch.einsum("nhql,nlhd -> nqhd",[attention, value]).reshape(
-        #     N,query_len,self.heads * self.head_dim
-        #     )
-        # out = torch.matmul(softmax_score,V).reshape(
-        #     N,query_len,self.heads * self.head_dim
-        #     )
+
+        # d_k로 나눈 뒤 => softmax
+        d_k = self.embed_size ** (1 / 2)
+        softmax_score = torch.softmax(score / d_k, dim=3)
+        # softmax_score shape : (n, h, query_len, key_len)
+
+        # softmax * Value => attention 통합을 위한 reshape
         out = torch.matmul(softmax_score, V).reshape(
             N_batch, query_len, self.heads * self.head_dim
         )
+        # softmax_score shape : (n, h, query_len, key_len)
+        # value shape : (n, h, value_len, d_k)
+        # (key_len = value_len 이므로)
+        # out shape : (n, h, query_len, d_k)
+        # reshape out : (n, query_len, h, d_k)
 
-        # softmax_score shape : (n x h x query_len x key_len)
-        # value shape : (n x h x value_len x d_k)
-        # (value_len과 key_len은 size가 같음.)
-        # out shape : (n x h x query_len x d_k)
-        # transpose shape : (n x query_len x embed_size)
         # concat all heads
         out = self.fc_out(out)
+        # concat out : (n, query_len, embed_size)
+
         return out
 
 
 class EncoderBlock(nn.Module):
     def __init__(self, embed_size, heads, dropout, forward_expansion) -> None:
         """
-        embed_size : token 개수 | 논문 512개
-        heads : attention 개수 | 논문 8개
-        dropout : 개별 Node를 골고루 학습하기 위한 방법론
-        forward_expansion : forward 계산시 차원을 얼마나 늘릴 것인지 결정, 임의로 결정하는 값
-                            forward_차원 계산은 forward_expension * embed_size
-                            논문에서는 4로 정함. 총 2048차원으로 늘어남.
+        config.json 참고
+
+        embed_size(=512) : embedding 차원
+        heads(=8) : Attention 개수
+        dropout(=0.1): Node 학습 비율
+        forward_expansion(=2) : FFNN의 차원을 얼마나 늘릴 것인지 결정,
+                                forward_expension * embed_size(2*512 = 1024)
         """
         super().__init__()
         # Attention 정의
         self.attention = selfAttention(embed_size, heads)
+
         ### Norm & Feed Forward
-        self.norm1 = nn.LayerNorm(embed_size)
-        self.norm2 = nn.LayerNorm(embed_size)
+        self.norm1 = nn.LayerNorm(embed_size)  # 512
+        self.norm2 = nn.LayerNorm(embed_size)  # 512
+
         self.feed_forawrd = nn.Sequential(
-            # 차원을 512 -> 2048로 증가
+            # 512 => 1024
             nn.Linear(embed_size, forward_expansion * embed_size),
-            # 차원을 ReLU 연산
+            # ReLU 연산
             nn.ReLU(),
-            # 차원 2048 -> 512로 축소
+            # 1024 => 512
             nn.Linear(forward_expansion * embed_size, embed_size),
         )
         self.dropout = nn.Dropout(dropout)
 
-    ### Encoder Block 구현
     def forward(self, value, key, query, mask):
+
         # self Attention
         attention = self.attention(value, key, query, mask)
         # Add & Normalization
@@ -139,26 +146,33 @@ class Encoder(nn.Module):
         embed_size,
         num_layers,
         heads,
-        device,
         forward_expansion,
         dropout,
         max_length,
+        device,
     ) -> None:
         """
-        src_vocab_size : input vocab 개수
-        num_layers : Encoder block 구현할 개수
-        dropout : dropout 비율 0 ~ 1사이
-        max_length : 문장 내 최대 token 개수
+        config.json 참고
+
+        src_vocab_size(=11509) : input vocab 개수
+        embed_size(=512) : embedding 차원
+        num_layers(=3) : Encoder Block 개수
+        heads(=8) : Attention 개수
+        device : cpu;
+        forward_expansion(=2) : FFNN의 차원을 얼마나 늘릴 것인지 결정,
+                                forward_expension * embed_size(2*512 = 1024)
+        dropout(=0.1): Node 학습 비율
+        max_length : batch 문장 내 최대 token 개수(src_token_len)
         """
         super().__init__()
         self.embed_size = embed_size
         self.device = device
 
-        # 시작부분 구현(input + positional_embeding)
-        self.word_embedding = nn.Embedding(src_vocab_size, embed_size)  # row / col
+        # input + positional_embeding
+        self.word_embedding = nn.Embedding(src_vocab_size, embed_size)  # (11509, 512) 2
 
         # positional embedding
-        pos_embed = torch.zeros(max_length, embed_size)
+        pos_embed = torch.zeros(max_length, embed_size)  # (src_token_len, 512) 2
         pos_embed.requires_grad = False
         position = torch.arange(0, max_length).float().unsqueeze(1)
         div_term = torch.exp(
@@ -166,7 +180,7 @@ class Encoder(nn.Module):
         )
         pos_embed[:, 0::2] = torch.sin(position * div_term)
         pos_embed[:, 1::2] = torch.cos(position * div_term)
-        self.pos_embed = pos_embed.unsqueeze(0).to(device)
+        self.pos_embed = pos_embed.unsqueeze(0).to(device)  # (1, src_token_len, 512) 3
 
         # Encoder Layer 구현
         self.layers = nn.ModuleList(
@@ -180,14 +194,20 @@ class Encoder(nn.Module):
                 for _ in range(num_layers)
             ]
         )
-        # dropout = 0 ~ 1
+        # dropout
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, mask):
-        _, seq_len = x.size()
+        _, seq_len = x.size()  # (n, src_token_len) 2
+        # n : batch_size(=128)
+        # src_token_len : batch 내 문장 중 최대 토큰 개수
 
-        pos_embed = self.pos_embed[:, :seq_len, :]  # 2 -> 3차원으로 늘림
+        pos_embed = self.pos_embed[:, :seq_len, :]
+        # (1, src_token_len, embed_size) 3
+
         out = self.dropout(self.word_embedding(x) + pos_embed)
+        # (n, src_token_len, embed_size) 3
+
         for layer in self.layers:
             # Q,K,V,mask
             out = layer(out, out, out, mask)
@@ -195,14 +215,15 @@ class Encoder(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, embed_size, heads, forward_expansion, dropout, device) -> None:
+    def __init__(self, embed_size, heads, dropout, forward_expansion) -> None:
         """
-        embed_size : token 개수 | 논문 512개
-        heads : attention 개수 | 논문 8개
-        dropout : 개별 Node를 골고루 학습하기 위한 방법론
-        forward_expansion : forward 계산시 차원을 얼마나 늘릴 것인지 결정, 임의로 결정하는 값
-                            forward_차원 계산은 forward_expension * embed_size
-                            논문에서는 4로 정함. 총 2048차원으로 늘어남.
+        config.json 참고
+
+        embed_size(=512) : embedding 차원
+        heads(=8) : Attention 개수
+        dropout(=0.1): Node 학습 비율
+        forward_expansion(=2) : FFNN의 차원을 얼마나 늘릴 것인지 결정,
+                                forward_expension * embed_size(2*512 = 1024)
         """
         super().__init__()
         self.norm = nn.LayerNorm(embed_size)
@@ -211,19 +232,22 @@ class DecoderBlock(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, value, key, src_trg_mask, target_mask):
-        # x = decoder_input
-        # value,key = encoder_input
-        # src_trg_mask : Multi-head attention에서 Pad에 대한 Mask 수행
-        # target_mask : Masked Multi-head attention에서 Teacher Forcing을 위한 Mask 수행
-        # output에 대한 attention 수행
+        """
+        x : target input with_embedding (n, trg_token_len, embed_size) 3
+        value, key : encoder_attention (n, src_token_len, embed_size) 3
+        """
 
         # masked_attention
         attention = self.attention(x, x, x, target_mask)
+        # (n, trg_token_len, embed_size) 3
+
         # add & Norm
         query = self.dropout(self.norm(attention + x))
 
         # encoder_decoder attention + feed_forward
         out = self.encoder_block(value, key, query, src_trg_mask)
+        # (n, trg_token_len, embed_size) 3
+
         return out
 
 
@@ -236,24 +260,30 @@ class Decoder(nn.Module):
         heads,
         forward_expansion,
         dropout,
-        device,
         max_length,
+        device,
     ) -> None:
         """
-        trg_vocab_size : input vocab 개수
-        embed_size : embedding_size
-        num_layers : Encoder block 구현할 개수
-        dropout : dropout 비율 0 ~ 1사이
-        max_length : 문장 내 최대 token 개수
+        config.json 참고
+
+        trg_vocab_size(=10873) : input vocab 개수
+        embed_size(=512) : embedding 차원
+        num_layers(=3) : Encoder Block 개수
+        heads(=8) : Attention 개수
+        forward_expansion(=2) : FFNN의 차원을 얼마나 늘릴 것인지 결정,
+                                forward_expension * embed_size(2*512 = 1024)
+        dropout(=0.1): Node 학습 비율
+        max_length : batch 문장 내 최대 token 개수
+        device : cpu
         """
         super().__init__()
         self.device = device
 
         # 시작부분 구현(input + positional_embeding)
-        self.word_embedding = nn.Embedding(trg_vocab_size, embed_size)
+        self.word_embedding = nn.Embedding(trg_vocab_size, embed_size)  # (10837,512) 2
 
         # positional embedding
-        pos_embed = torch.zeros(max_length, embed_size)
+        pos_embed = torch.zeros(max_length, embed_size)  # (trg_token_len, embed_size) 2
         pos_embed.requires_grad = False
         position = torch.arange(0, max_length).float().unsqueeze(1)
         div_term = torch.exp(
@@ -262,53 +292,76 @@ class Decoder(nn.Module):
         pos_embed[:, 0::2] = torch.sin(position * div_term)
         pos_embed[:, 1::2] = torch.cos(position * div_term)
         self.pos_embed = pos_embed.unsqueeze(0).to(device)
+        # (1, trg_token_len, embed_size) 3
 
         # Decoder Layer 구현
         self.layers = nn.ModuleList(
             [
-                DecoderBlock(embed_size, heads, forward_expansion, dropout, device)
+                DecoderBlock(embed_size, heads, dropout, forward_expansion)
                 for _ in range(num_layers)
             ]
         )
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, enc_out, src_trg_mask, trg_mask):
-        # N, seq_length = x.shape
-        # positional embedding
+    def forward(self, x, enc_src, src_trg_mask, trg_mask):
+        # n : batch_size(=128)
+        # trg_token_len : batch 내 문장 중 최대 토큰 개수
+
         _, seq_len = x.size()
+        # (n, trg_token_len)
+
         pos_embed = self.pos_embed[:, :seq_len, :]
-        out = self.dropout(self.word_embedding(x) + pos_embed)
+        # (1, trg_token_len, embed_size) 3
+
+        out = self.dropout(self.word_embedding(x) + pos_embed).to(self.device)
+        # (n, trg_token_len, embed_size) 3
+
         for layer in self.layers:
-            # Decoder Input, Encoder K, Encoder V , src_trg_mask, trg_mask
-            out = layer(out, enc_out, enc_out, src_trg_mask, trg_mask)
+            # Decoder Input, Encoder(K), Encoder(V) , src_trg_mask, trg_mask
+            out = layer(out, enc_src, enc_src, src_trg_mask, trg_mask)
         return out
 
 
-class transformer(nn.Module):
+class Transformer(nn.Module):
     def __init__(
         self,
         src_vocab_size,
         trg_vocab_size,
         src_pad_idx,
         trg_pad_idx,
-        embed_size=512,
-        num_layers=6,
-        forward_expansion=4,
-        heads=8,
-        dropout=0,
-        device="cpu",
-        max_length=100,
+        embed_size,
+        num_layers,
+        forward_expansion,
+        heads,
+        dropout,
+        device,
+        max_length,
     ) -> None:
+        """
+        src_vocab_size(=11509) : source vocab 개수
+        trg_vocab_size(=10873) : target vocab 개수
+        src_pad_idx(=1) : source vocab의 <pad> idx
+        trg_pad_idx(=1) : source vocab의 <pad> idx
+        embed_size(=512) : embedding 차원
+        num_layers(=3) : Encoder Block 개수
+        forward_expansion(=2) : FFNN의 차원을 얼마나 늘릴 것인지 결정,
+                                forward_expension * embed_size(2*512 = 1024)
+        heads(=8) : Attention 개수
+        dropout(=0.1): Node 학습 비율
+        device : cpu
+        max_length(=140) : batch 문장 내 최대 token 개수
+
+        """
         super().__init__()
         self.Encoder = Encoder(
             src_vocab_size,
             embed_size,
             num_layers,
             heads,
-            device,
             forward_expansion,
             dropout,
             max_length,
+            device,
         )
         self.Decoder = Decoder(
             trg_vocab_size,
@@ -317,49 +370,63 @@ class transformer(nn.Module):
             heads,
             forward_expansion,
             dropout,
-            device,
             max_length,
+            device,
         )
         self.src_pad_idx = src_pad_idx
         self.trg_pad_idx = trg_pad_idx
         self.device = device
 
         # Probability Generlator
-        self.fc_out = nn.Linear(embed_size, trg_vocab_size)
+        self.fc_out = nn.Linear(embed_size, trg_vocab_size)  # (512,10873) 2
 
     def encode(self, src):
+        """
+        Test 용도로 활용 encoder 기능
+        """
         src_mask = self.make_pad_mask(src, src)
         return self.Encoder(src, src_mask)
 
-    def decode(self, enc_src, trg):
+    def decode(self, src, trg, enc_src):
+        """
+        Test 용도로 활용 decoder 기능
+        """
         # decode
-        src_trg_mask = self.make_pad_mask(trg, enc_src)  # Decoder Input에 대한 masking 필요
+        src_trg_mask = self.make_pad_mask(trg, src)
         trg_mask = self.make_trg_mask(trg)
         out = self.Decoder(trg, enc_src, src_trg_mask, trg_mask)
         # Linear Layer
-        out = self.fc_out(out)  # num of sentence x max_length x trg_vocab_size
+        out = self.fc_out(out)  # (n, decoder_query_len, trg_vocab_size) 3
 
         # Softmax
         out = F.log_softmax(out, dim=-1)
         return out
 
     def make_pad_mask(self, query, key):
+        """
+        Multi-head attention pad 함수
+        """
         len_query, len_key = query.size(1), key.size(1)
 
-        # batch_size x 1 x 1 x len_key
         key = key.ne(self.src_pad_idx).unsqueeze(1).unsqueeze(2)
-        # batch_size x 1 x len_query x len_key
-        key = key.repeat(1, 1, len_query, 1)
+        # (batch_size x 1 x 1 x src_token_len) 4
 
-        # batch_size x 1 x len_query x 1
+        key = key.repeat(1, 1, len_query, 1)
+        # (batch_size x 1 x len_query x src_token_len) 4
+
         query = query.ne(self.src_pad_idx).unsqueeze(1).unsqueeze(3)
-        # batch_size x 1 x len_query x len_key
+        # (batch_size x 1 x src_token_len x 1) 4
+
         query = query.repeat(1, 1, 1, len_key)
+        # (batch_size x 1 x src_token_len x src_token_len) 4
 
         mask = key & query
         return mask
 
     def make_trg_mask(self, trg):
+        """
+        Masked Multi-head attention pad 함수
+        """
         # trg = triangle
         N, trg_len = trg.shape
         trg_mask = torch.tril(torch.ones((trg_len, trg_len))).expand(
@@ -369,12 +436,23 @@ class transformer(nn.Module):
 
     def forward(self, src, trg):
         src_mask = self.make_pad_mask(src, src)
+        # (n,1,src_token_len,src_token_len) 4
+
         trg_mask = self.make_trg_mask(trg)
-        src_trg_mask = self.make_pad_mask(trg, src)  # Decoder Input에 대한 masking 필요
+        # (n,1,trg_token_len,trg_token_len) 4
+
+        src_trg_mask = self.make_pad_mask(trg, src)
+        # (n,1,trg_token_len,src_token_len) 4
+
         enc_src = self.Encoder(src, src_mask)
+        # (n, src_token_len, embed_size) 3
+
         out = self.Decoder(trg, enc_src, src_trg_mask, trg_mask)
+        # (n, trg_token_len, embed_size) 3
+
         # Linear Layer
-        out = self.fc_out(out)  # num of sentence x max_length x trg_vocab_size
+        out = self.fc_out(out)  # embed_size => trg_vocab_size
+        # (n, trg_token_len, trg_vocab_size) 3
 
         # Softmax
         out = F.log_softmax(out, dim=-1)
