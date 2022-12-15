@@ -7,8 +7,7 @@ import math
 class selfAttention(nn.Module):
     def __init__(self, embed_size, heads) -> None:
         """
-        config.json 참고
-
+        config 참고
         embed_size(=512) : embedding 차원
         heads(=8) : Attention 개수
         """
@@ -32,7 +31,6 @@ class selfAttention(nn.Module):
         - N_batch = 문장 개수(=batch_size)
         - seq_len : 훈련 문장 내 최대 token 개수
         - embed_size : embedding 차원
-
         """
 
         N_batch = query.shape[0]  # 총 문장 개수
@@ -100,7 +98,7 @@ class selfAttention(nn.Module):
 class EncoderBlock(nn.Module):
     def __init__(self, embed_size, heads, dropout, forward_expansion) -> None:
         """
-        config.json 참고
+        config 참고
 
         embed_size(=512) : embedding 차원
         heads(=8) : Attention 개수
@@ -152,7 +150,7 @@ class Encoder(nn.Module):
         device,
     ) -> None:
         """
-        config.json 참고
+        config 참고
 
         src_vocab_size(=11509) : input vocab 개수
         embed_size(=512) : embedding 차원
@@ -217,7 +215,7 @@ class Encoder(nn.Module):
 class DecoderBlock(nn.Module):
     def __init__(self, embed_size, heads, dropout, forward_expansion) -> None:
         """
-        config.json 참고
+        config 참고
 
         embed_size(=512) : embedding 차원
         heads(=8) : Attention 개수
@@ -264,7 +262,7 @@ class Decoder(nn.Module):
         device,
     ) -> None:
         """
-        config.json 참고
+        config 참고
 
         trg_vocab_size(=10873) : input vocab 개수
         embed_size(=512) : embedding 차원

@@ -23,8 +23,7 @@ def make_vocab(
     trg_lang: Iterable,
 ) -> list:
     """
-    Word embedding을 위한 vocab 생성
-    (Transformer에서 subword embedding 사용 가능)
+    Word embedding을 위한 vocab 생성(sub_word embedding X)
     src_lang : input 언어
     trg_lang : output 언어
 
