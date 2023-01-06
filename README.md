@@ -1,52 +1,29 @@
-## Pytorch를 활용해 transformer 구현, 학습, 평가하기
+##  Transformer 이해를 돕기위한 튜토리얼 제작
 
-- Pytorch 활용해 모델을 직접 구현한 뒤 이를 학습하고 평가하는 방법에 대한 자료임.
-- Multi-30k 데이터를 활용해 :fr: 프랑스어 -> :us: 영어 번역을 수행하는 Transformer 학습
-- Transformer 구조에 대한 이론적 이해가 필요한 경우 <a href='https://yangoos57.github.io/blog/DeepLearning/paper/Transformer/Transformer_From_Scratch/'>도식화로 논문 이해하기 : Transformer
-  </a>를 참고
+### 프로젝트 소개 
+- Pytorch 활용해 Transformer를 구현하고, 이를 학습하고 평가하는 방법에 대해 소개함.
+- Multi-30k 데이터를 활용해 :fr: 프랑스어 -> :us: 영어 번역을 수행하는 Transformer 제작
+- Transformer 구조에 대한 이론적 이해를 돕기 위해 <a href='https://yangoos57.github.io/blog/DeepLearning/paper/Transformer/Transformer_From_Scratch/'>도식화로 논문 이해하기 : Transformer
+  </a> 작성
 
 <br/>
 
 ### 이런 경우 활용하면 좋습니다.
 
 - Transformer를 Pytorch로 구현하는 방법에 대해 알고싶은 경우
-- 모델 구현은 했으나 모델 내 데이터가 흐르는 과정에 이해의 어려움이 있는 경우
-- 모델 학습, 평가 방법이 이해되지 않는 경우
+- 모델 구현은 했으나 모델 내부에서 데이터가 흐르는 과정에 대한 이해가 어려운 경우
+- 직접 구현한 Transfomrer를 활용해 학습, 평가를 수행하고 싶은 경우
 
 <br/>
 
-### 구동환경
 
-```
-torch == 1.12.1
-torchtext == 0.13.1
-torchdata == 0.4.1
-spacy == 3.4.3
-pandas == 1.4.3
-```
+### 세부 내용
+
+- 학습 및 테스트 과정에 대한 이해를 돕기 위해 `1.training & validation.ipynb`와 `2.test tutorial.ipynb` 작성
 
 <br/>
 
-### 세부 기능
-
-- 모델 내부에서 발생하는 데이터 흐름 및 데이터 차원 변경을 추적할 수 있도록 개별 output에 대해 차원별 변수를 기록
-
-  ```python
-    # 예시
-      def forward(self, src, trg):
-        src_mask = self.make_pad_mask(src, src)
-        # (n,1,src_token_len,src_token_len) 4
-
-        trg_mask = self.make_trg_mask(trg)
-        # (n,1,trg_token_len,trg_token_len) 4
-
-        src_trg_mask = self.make_pad_mask(trg, src)
-        # (n,1,trg_token_len,src_token_len) 4
-  ```
-
- <br/>
-
-- parameter가 어떤 용도로, 어떻게 적용되는지 이해할 수 있도록 `transformer.json`을 기준으로 각주 작성
+- 모델에서 활용하는 Argument가 어떤 용도로, 어떻게 활용되는지 이해를 도울 수 있는 각주 제공
 
   ```python
   # 예시
@@ -64,12 +41,27 @@ pandas == 1.4.3
   ```
 
 <br/>
+
+
+- 모델 내부에서 발생하는 데이터 흐름 및 Tensor의 차원 변경을 추적할 수 있는 각주 제공
+
+  ```python
+    # 예시
+      def forward(self, src, trg):
+        src_mask = self.make_pad_mask(src, src)
+        # (n,1,src_token_len,src_token_len) 4
+
+        trg_mask = self.make_trg_mask(trg)
+        # (n,1,trg_token_len,trg_token_len) 4
+
+        src_trg_mask = self.make_pad_mask(trg, src)
+        # (n,1,trg_token_len,src_token_len) 4
+  ```
+
+ <br/>
   
-- 학습 과정과 및 테스트 과정을 이해할 수 있도록 `1.training & validation.ipynb`와 `2.test tutorial.ipynb`를 작성
 
-<br/>
-
-- 학습 과정을 실시간으로 확인하며 모델이 학습하는 원리를 이해할 수 있도록 helper 함수 구현\*\*
+- 모델의 학습 과정을 실시간으로 확인할 수 있도록 helper 함수 구현
 
   ```python
   1번째 epoch 실행
@@ -135,6 +127,18 @@ pandas == 1.4.3
   Epoch: 3, Train loss: 3.417, Val loss: 3.535, Epoch time = 33.396s
   ----*----*----*----*----*----*----*----*----*----*----*----*----*----*----*
   ```
+
+### 구동환경
+
+```
+torch == 1.12.1
+torchtext == 0.13.1
+torchdata == 0.4.1
+spacy == 3.4.3
+pandas == 1.4.3
+```
+
+<br/>
 
 ### 참고자료
 
