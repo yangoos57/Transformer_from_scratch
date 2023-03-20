@@ -69,7 +69,7 @@ def make_vocab(
 
 def sequential_transforms(*transforms):
     """
-    *transform에 포함된 함수를 연속적으로 수행하게 하는 매서드.
+    *transform에 포함된 함수를 연속적으로 수행하게 하는 메서드.
     """
 
     def func(txt_input):
