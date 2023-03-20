@@ -1,7 +1,6 @@
 ## Transformer 이해를 돕기위한 튜토리얼 제작
 
-> <a href='https://yangoos57.github.io/blog/DeepLearning/paper/Transformer/Transformer_From_Scratch/'>도식화로 논문 이해하기 : Transformer
-> </a> 포스트에 대한 Repo입니다.
+>### <a href='https://yangoos57.github.io/blog/DeepLearning/paper/Transformer/Transformer_From_Scratch/'>도식화로 논문 이해하기 : Transformer</a> 포스트에 대한 Repo입니다.
 
 ### 프로젝트 소개
 
