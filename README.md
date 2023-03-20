@@ -1,10 +1,12 @@
-##  Transformer 이해를 돕기위한 튜토리얼 제작
+## Transformer 이해를 돕기위한 튜토리얼 제작
 
-### 프로젝트 소개 
+> <a href='https://yangoos57.github.io/blog/DeepLearning/paper/Transformer/Transformer_From_Scratch/'>도식화로 논문 이해하기 : Transformer
+> </a> 포스트에 대한 Repo입니다.
+
+### 프로젝트 소개
+
 - Pytorch 활용해 Transformer를 구현하고, 이를 학습하고 평가하는 방법에 대해 소개함.
 - Multi-30k 데이터를 활용해 :fr: 프랑스어 -> :us: 영어 번역을 수행하는 Transformer 제작
-- Transformer 구조에 대한 이론적 이해를 돕기 위해 <a href='https://yangoos57.github.io/blog/DeepLearning/paper/Transformer/Transformer_From_Scratch/'>도식화로 논문 이해하기 : Transformer
-  </a> 작성
 
 <br/>
 
@@ -16,50 +18,11 @@
 
 <br/>
 
-
 ### 세부 내용
 
-- 학습 및 테스트 과정에 대한 이해를 돕기 위해 `1.training & validation.ipynb`와 `2.test tutorial.ipynb` 작성
+- 학습 및 테스트 과정에 대한 이해를 돕기 위해 `[tutorial] training transformer.ipynb`와 `[tutorial] test transformer.ipynb` 작성
 
 <br/>
-
-- 모델에서 활용하는 Argument가 어떤 용도로, 어떻게 활용되는지 이해를 도울 수 있는 각주 제공
-
-  ```python
-  # 예시
-  class EncoderBlock(nn.Module):
-      def __init__(self, embed_size, heads, dropout, forward_expansion) -> None:
-          """
-          config 참고
-
-          embed_size(=512) : embedding 차원
-          heads(=8) : Attention 개수
-          dropout(=0.1): Node 학습 비율
-          forward_expansion(=2) : FFNN의 차원을 얼마나 늘릴 것인지 결정,
-                                  forward_expension * embed_size(2*512 = 1024)
-          """
-  ```
-
-<br/>
-
-
-- 모델 내부에서 발생하는 데이터 흐름 및 Tensor의 차원 변경을 추적할 수 있는 각주 제공
-
-  ```python
-    # 예시
-      def forward(self, src, trg):
-        src_mask = self.make_pad_mask(src, src)
-        # (n,1,src_token_len,src_token_len) 4
-
-        trg_mask = self.make_trg_mask(trg)
-        # (n,1,trg_token_len,trg_token_len) 4
-
-        src_trg_mask = self.make_pad_mask(trg, src)
-        # (n,1,trg_token_len,src_token_len) 4
-  ```
-
- <br/>
-  
 
 - 모델의 학습 과정을 실시간으로 확인할 수 있도록 helper 함수 구현
 
@@ -127,6 +90,44 @@
   Epoch: 3, Train loss: 3.417, Val loss: 3.535, Epoch time = 33.396s
   ----*----*----*----*----*----*----*----*----*----*----*----*----*----*----*
   ```
+
+<br/>
+
+- 모델에서 활용하는 Argument가 어떤 용도로, 어떻게 활용되는지 이해를 도울 수 있는 주석 제공
+
+  ```python
+  # 예시
+  class EncoderBlock(nn.Module):
+      def __init__(self, embed_size, heads, dropout, forward_expansion) -> None:
+          """
+          config 참고
+
+          embed_size(=512) : embedding 차원
+          heads(=8) : Attention 개수
+          dropout(=0.1): Node 학습 비율
+          forward_expansion(=2) : FFNN의 차원을 얼마나 늘릴 것인지 결정,
+                                  forward_expension * embed_size(2*512 = 1024)
+          """
+  ```
+
+<br/>
+
+- 모델 내부에서 발생하는 데이터 흐름 및 Tensor의 차원 변경을 추적할 수 있는 주석 제공
+
+  ```python
+    # 예시
+      def forward(self, src, trg):
+        src_mask = self.make_pad_mask(src, src)
+        # (n,1,src_token_len,src_token_len) 4
+
+        trg_mask = self.make_trg_mask(trg)
+        # (n,1,trg_token_len,trg_token_len) 4
+
+        src_trg_mask = self.make_pad_mask(trg, src)
+        # (n,1,trg_token_len,src_token_len) 4
+  ```
+
+ <br/>
 
 ### 구동환경
 
